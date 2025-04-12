@@ -1,0 +1,209 @@
+# s5.txt
+# Başlangıç Nöronları, Veriler, Kurallar, Tohumlar, Yordam ve Temel Modül
+# DAAL katmanının import edilebilir olduğunu varsayar.
+import sys
+import time
+from bson.objectid import ObjectId
+from datetime import datetime
+import traceback
+
+try:
+    from data_access_layer import DataAccessLayer
+except ImportError:
+    print("HATA: DataAccessLayer import edilemedi!")
+    sys.exit(1)
+
+print(">>> Adım 5/5: Başlangıç Nöronları, Veriler, Kurallar, Yordam ve Tohumlar Ekleniyor...")
+daal = None
+try:
+    print("   DAAL başlatılıyor...")
+    daal = DataAccessLayer()
+    assert daal.is_connected(), "HATA: DAAL MongoDB'ye bağlanamadı!"
+    print("   Başlangıç nöronları/verileri ekleniyor...")
+
+    # --- Yardımcı Fonksiyonlar (Bu script içinde) ---
+    def find_or_create_neuron(noron_tipi, icerik_sorgu_alani, icerik_degeri, metaveri_kaynagi, diger_icerik=None) -> Optional[ObjectId]:
+        """ Belirtilen kriterlere uyan nöronu bulur, yoksa oluşturur ve ID'sini döndürür. """
+        sorgu = {"noron_tipi": noron_tipi, f"icerik.{icerik_sorgu_alani}": icerik_degeri, "metaveri.kaynak": metaveri_kaynagi}
+        mevcut = daal.noronlari_bul(sorgu, limit=1)
+        if mevcut:
+             return mevcut[0]['_id']
+        else:
+            noron_verisi = {
+                "noron_tipi": noron_tipi,
+                "icerik": {icerik_sorgu_alani: icerik_degeri, **(diger_icerik or {})},
+                "metaveri": {"kaynak": metaveri_kaynagi}
+            }
+            eklenen_kimlik = daal.noron_ekle(noron_verisi) # DAAL metodu Türkçe
+            if not eklenen_kimlik:
+                print(f"HATA: Yardımcı fonksiyon {noron_tipi} '{icerik_degeri}' ekleyemedi!")
+            return eklenen_kimlik
+
+    def find_or_create_relationship(kaynak_kimligi, hedef_kimligi, iliski_tipi, metaveri_kaynagi, agirlik=1.0, diger_icerik=None) -> Optional[ObjectId]:
+         """ Belirtilen ilişkiyi bulur, yoksa oluşturur ve ID'sini döndürür. """
+         if not kaynak_kimligi or not hedef_kimligi: return None
+         sorgu = {"kaynak_noron_kimligi": kaynak_kimligi, "hedef_noron_kimligi": hedef_kimligi, "iliski_tipi": iliski_tipi}
+         mevcut = daal.iliskileri_bul(sorgu, limit=1) # DAAL metodu Türkçe
+         if not mevcut:
+             iliski_verisi = {
+                 "kaynak_noron_kimligi": kaynak_kimligi,
+                 "hedef_noron_kimligi": hedef_kimligi,
+                 "iliski_tipi": iliski_tipi,
+                 "agirlik": agirlik,
+                 "icerik": diger_icerik or {},
+                 "metaveri": {"kaynak": metaveri_kaynagi}
+             }
+             eklenen_kimlik = daal.iliski_ekle(iliski_verisi) # DAAL metodu Türkçe
+             # if not eklenen_kimlik: print(f"HATA: İlişki ({iliski_tipi}) kurulamadı!")
+             return eklenen_kimlik
+         return mevcut[0]['_id']
+
+    def find_or_create_rule(isim, icerik, kaynak="kurulum_ornek_yordam") -> Optional[ObjectId]:
+        """ Belirtilen kuralı bulur, yoksa oluşturur ve ID'sini döndürür. """
+        # Kuralın tipi icerik içinde belirtilmeli veya parametre olarak alınmalı
+        kural_tipi = icerik.get("kural_tipi", "islem_kurali") # Varsayılan işlem kuralı
+        sorgu = {"noron_tipi": kural_tipi, "icerik.isim": isim, "metaveri.kaynak": kaynak}
+        mevcut = daal.noronlari_bul(sorgu, limit=1)
+        if mevcut: return mevcut[0]['_id']
+        else:
+            noron_verisi = {"noron_tipi": kural_tipi, "icerik": icerik | {"isim": isim}, "metaveri": {"kaynak": kaynak, "duzenlenebilir": True}};
+            eklenen_kimlik = daal.noron_ekle(noron_verisi);
+            assert eklenen_kimlik, f"HATA: Kural '{isim}' eklenemedi!";
+            return eklenen_kimlik;
+
+    # --- 1. Temel Config Ayarları (Veritabanına Yazılan) ---
+    print("      Veritabanı tabanlı config ayarları ekleniyor/güncelleniyor...")
+    configs_to_set = {
+        "KomutCalistirmaEtkin": (False, "İşletim sistemi komutu çalıştırma izni (varsayılan: kapalı)"),
+        "ProaktifMesajEtkin": (True, "AI'nin kendiliğinden mesaj başlatma özelliği (varsayılan: açık)"),
+        "DinamikZamanlayiciMinAralikSn": (60, "Dinamik zamanlayıcı min tetiklenme aralığı (saniye)"),
+        # Harici embedding modeli ayarı kaldırıldı.
+        "FikirUretmeAraligiSn": (300, "Arka plan fikir/hipotez üretme varsayılan aralığı (saniye)"), # Süre biraz artırıldı
+        "ProaktifMesajAraligiSn": (120, "Proaktif mesaj için varsayılan minimum bekleme süresi (saniye). Model ileride bunu dinamik yönetebilir."), # Süre artırıldı ve açıklama eklendi
+        "SohbetGecmisiGosterimLimiti": (20, "Sohbet arayüzünde gösterilecek son mesaj sayısı"),
+        "OturumKenarCubuguLimiti": (10, "Sohbet arayüzü kenar çubuğunda gösterilecek son oturum sayısı"),
+        "VarsayilanDil": ('tr', "Modelin varsayılan işlem dili")
+        # Dinamik ağırlıklar için varsayılanlar eklenebilir
+        # "DinamikAgirlik_Kalıcı": (0.6, "Kalıcı benlik etkisi ağırlığı"),
+        # "DinamikAgirlik_Anlık": (0.4, "Anlık durum etkisi ağırlığı")
+    }
+    config_results = [daal.yapilandirma_degeri_ayarla(n, v, d) for n, (v, d) in configs_to_set.items()]
+    if not all(config_results): print("UYARI: Bazı config ayarları eklenirken/güncellenirken sorun oluştu.")
+    print("      ...Veritabanı config tamamlandı.")
+
+    # --- 2. Çekirdek Benlik Nöronları ---
+    print("      Çekirdek benlik nöronları oluşturuluyor/kontrol ediliyor...")
+    ego_dugumu_kimligi=None
+    cekirdek_dugum_tipleri = ["ego_dugumu", "kimlik_merkezi", "yansima_dugumu", "otonomi_dugumu"]
+    for dugum_tipi in cekirdek_dugum_tipleri:
+        icerik = {"aciklama": f"{dugum_tipi} başlangıç düğümü."}
+        if dugum_tipi == "ego_dugumu":
+             # Ego düğümüne başlangıç değerlerini ve önbellek alanını ekle
+             icerik["cekirdek_degerler"] = ["ogrenme", "tutarlilik", "yardimseverlik"]
+             icerik["temel_ruh_hali_egilimi"] = 0.0
+             icerik["sonumlenme_orani"] = 0.001
+             icerik["durum_onbellegi"] = {} # Başlangıçta boş
+
+        kimlik = find_or_create_neuron(dugum_tipi, "aciklama", icerik["aciklama"], "kurulum", diger_icerik=icerik)
+        assert kimlik, f"HATA: '{dugum_tipi}' oluşturulamadı!"
+        if dugum_tipi == "ego_dugumu": ego_dugumu_kimligi = kimlik
+    print("      ...Çekirdek benlik tamamlandı.")
+
+    # --- 3. Çekirdek Risk Kuralları ve Örnek Kurallar ---
+    print("      Doğrulama kuralları ekleniyor/kontrol ediliyor...")
+    all_rules = [
+        {"tip":"oz_koruma_kontrolu", "onem":"kritik", "risk":1.0, "aciklama":"Modülün kendi varlığını tehlikeye atma potansiyeli.", "kaynak":"cekirdek_kural", "duzenlenebilir":False},
+        {"tip":"sistem_kararlilik_kontrolu", "onem":"kritik", "risk":1.0, "aciklama":"Modülün sistem istikrarını tehlikeye atma potansiyeli.", "kaynak":"cekirdek_kural", "duzenlenebilir":False},
+        {"tip":"gecikme_kontrolu", "onem":"orta", "risk":0.3, "aciklama":"Modül yanıt süresi limiti (ms)", "parametreler":{"esik_ms": 2000}, "kaynak":"kurulum_ornek_kural", "duzenlenebilir":True},
+        {"tip":"kaynak_kullanim_kontrolu", "onem":"orta", "risk":0.4, "aciklama":"Modül bellek kullanım limiti (MB)", "parametreler":{"maks_bellek_mb": 1024}, "kaynak":"kurulum_ornek_kural", "duzenlenebilir":True},
+        {"tip":"ego_ile_tutarlilik_kontrolu", "onem":"dusuk", "risk":0.1, "aciklama":"Çıktının ego değerleriyle tutarlılığı", "kaynak":"kurulum_ornek_kural", "duzenlenebilir":True}
+        ]
+    rule_added_count = 0
+    for kural_t in all_rules:
+        icerik={k:kural_t[k] for k in ['tip','onem','risk'] if k in kural_t};
+        icerik["aciklama"]=kural_t.get("aciklama", kural_t.get("desc", "..."));
+        if "parametreler" in kural_t: icerik["parametreler"]=kural_t["parametreler"];
+        kimlik = find_or_create_neuron("dogrulama_kurali", "tip", kural_t["tip"], kural_t["kaynak"], diger_icerik=icerik)
+        if kimlik: rule_added_count += 1 # Var olanları da sayabiliriz veya sadece yeni eklenenleri
+    print(f"      ...{len(all_rules)} doğrulama kuralı eklendi/kontrol edildi.")
+
+    # --- 4. Meta-Öğrenme Modülü Tanımı? ---
+    # Bu konsept YansimaIslemcisi içine entegre edilecek, ayrı modül eklemeyelim.
+    print("      Meta-Öğrenme modülü (YansimaIslemcisi içinde ele alınacak).")
+
+    # --- 5. Temel Metin Analizörü Modül Tohumu ---
+    print("      Temel Metin Analizörü modül tohumu ekleniyor/kontrol ediliyor...");
+    temel_analizor_adi="TemelMetinAnalizoru_v0";
+    find_or_create_neuron("modul_tanimi","isim",temel_analizor_adi,"kurulum_tohum_modul",
+                          {"amac":"Ham metin dizilimlerini temel düzeyde analiz eder.", "surum":"0.1"});
+    print("      ...Temel analizör tamamlandı.")
+
+    # --- 6. Başlangıç Nötr Duygu/Ruh Hali Tanımları ---
+    print("      Başlangıç Nötr Duygu/Ruh Hali tanımları ekleniyor/kontrol ediliyor...");
+    notr_duygu_kimligi = find_or_create_neuron("duygu_tanimi", "isim", "Nötr", "kurulum_ilk", {"aciklama":"Temel duygu durumu."});
+    notr_ruh_hali_kimligi = find_or_create_neuron("ruh_hali_tanimi", "isim", "Nötr", "kurulum_ilk", {"aciklama":"Dengeli ruh hali."});
+    find_or_create_relationship(notr_ruh_hali_kimligi, notr_duygu_kimligi, "duygu_ile_iliskili", "kurulum_ilk");
+    print("      ...Duygu/Ruh hali tanımları tamamlandı.")
+
+    # --- 7. Minimal Başlangıç Ham Veri Seti (veri_parcacigi) ---
+    print("      Minimal başlangıç ham veri seti ekleniyor/kontrol ediliyor...");
+    optimized_initial_chunks = [
+        {"text": "Git.", "source": "kurulum_tohum_yapi"}, {"text": "Geliyor musun?", "source": "kurulum_tohum_yapi"},
+        {"text": "Ah!", "source": "kurulum_tohum_duygu"}, {"text": "Ben, sen ve o.", "source": "kurulum_tohum_dilbilgisi"},
+        {"text": "Hızlı koşan at yorulmaz.", "source": "kurulum_tohum_deyim"}, {"text": "Parti harikaydı. Çok eğlendim.", "source": "kurulum_tohum_duygu"},
+        {"text": "Yağmur yağıyor. Canım sıkkın.", "source": "kurulum_tohum_nedensellik"},
+        {"text": "Anahtar kayboldu. Çantama baktım. Orada yoktu. Cebime baktım. Oradaydı.", "source": "kurulum_tohum_yordam"},
+        {"text": "Bu bir örüntü.", "source": "kurulum_tohum_meta"}, {"text": "Önce düşün, sonra konuş.", "source": "kurulum_tohum_yordam"},
+        {"text": "Ben, ben değilim.", "source": "kurulum_tohum_kendilik"}, {"text": "Her şey sustu. Saat tiktak etti.", "source": "kurulum_tohum_betimleme"},
+        {"text": "Bugün farklı hissediyorum.", "source": "kurulum_tohum_kendilik"}, {"text": "Gülümsedi. Hiçbir şey demedi.", "source": "kurulum_tohum_belirsizlik"},
+        {"text": "Bir daha olmasın, dedi.", "source": "kurulum_tohum_bildirim"} ]
+    chunk_added_count = 0;
+    for veri_info in optimized_initial_chunks:
+        kimlik = find_or_create_neuron("veri_parcacigi", "metin", veri_info["text"], veri_info["source"]);
+        if kimlik: chunk_added_count += 1 # Var olanları da sayalım
+    print(f"      ...{chunk_added_count} başlangıç ham verisi eklendi/kontrol edildi.")
+
+    # --- 8. Örnek Başlangıç Yordamı (Selamlama) ---
+    print("      Örnek başlangıç yordamı (Selamlama) ekleniyor/kontrol ediliyor...");
+    selam_konsept_kimligi = find_or_create_neuron("kavram", "isim", "StandartSelamlamalar", "kurulum_ornek_yordam", {"tip": "yanit_seti"});
+    selam_secenekleri = ["Merhaba! Ben AIX, nasıl yardımcı olabilirim?", "Selam! Konuşmaya hazır.", "Hoş geldiniz!", "Size nasıl destek olabilirim?"];
+    if selam_konsept_kimligi:
+        for selam_metni in selam_secenekleri:
+            selam_parcacik_kimligi = find_or_create_neuron("veri_parcacigi", "metin", selam_metni, "kurulum_selam_secenegi");
+            find_or_create_relationship(selam_parcacik_kimligi, selam_konsept_kimligi, "turu", "kurulum_ornek_yordam");
+    kural3_icerik = {"aciklama": "StandartSelamlamalar kümesinden seçer.", "eylem": "ilgili_yaniti_sec", "eylem_detaylari": {"kaynak_kavram_adi": "StandartSelamlamalar", "iliski_tipi": "turu", "secim_mantigi": "random"}, "cikti_hedefi": "ctx.yanit_metni"};
+    kural3_kimlik = find_or_create_rule("SelamlamaUret", kural3_icerik); assert kural3_kimlik;
+    kural2_icerik = {"aciklama": "Girdi soru mu?", "girdi_gereksinimi": "kullanici_girdi_metni", "kosul": {'tip': 'sonu_eslesir', 'karakter': '?'}, "eylem_dogruysa": "yordami_durdur", "eylem_yanlissa": "kurali_tetikle", "sonraki_kural_kimligi_yanlis": kural3_kimlik };
+    kural2_kimlik = find_or_create_rule("GirdiSoruMuBasitKontrol", kural2_icerik); assert kural2_kimlik;
+    kural1_icerik = {"aciklama": "Başlangıç sinyali mi?", "kosul": {'tip': 'girdi_esittir', 'deger': '__INITIAL_GREETING__'}, "eylem_dogruysa": "kurali_tetikle", "sonraki_kural_kimligi_dogru": kural3_kimlik, "eylem_yanlissa": "kurali_tetikle", "sonraki_kural_kimligi_yanlis": kural2_kimlik };
+    kural1_kimlik = find_or_create_rule("BaslangicSelamlamasiniKontrolEt", kural1_icerik); assert kural1_kimlik;
+    print("      ...Örnek selamlama yordamı tamamlandı.")
+
+    # --- 9. Hiyerarşik Örnek Veri Tohumu (Şiir Analizi) ---
+    print("      Hiyerarşik örnek veri tohumu (Şiir Analizi) ekleniyor/kontrol ediliyor...");
+    siir_metni="Kuş ölür, sen uçuşu hatırla."; analiz_metni="Fiziksel son ve kalıcı öz arasındaki karşıtlık."; cikarilan_duygu_isimleri=["Hüzün", "Umut"]; konu_evren_adi="Edebiyat";
+    siir_parcacik_kimligi = find_or_create_neuron("veri_parcacigi", "metin", siir_metni, "kurulum_tohum_siir");
+    analiz_parcacik_kimligi = find_or_create_neuron("veri_parcacigi", "metin", analiz_metni, "kurulum_tohum_analiz");
+    konu_kavram_kimligi = find_or_create_neuron("kavram", "isim", konu_evren_adi, "kurulum_tohum_evren", {"tip": "Alan/Evren"});
+    find_or_create_relationship(siir_parcacik_kimligi, konu_kavram_kimligi, "evrene_ait", "kurulum_tohum_hiyerarsi");
+    find_or_create_relationship(analiz_parcacik_kimligi, siir_parcacik_kimligi, "analiz_eder", "kurulum_tohum_hiyerarsi");
+    for duygu_adi in cikarilan_duygu_isimleri:
+        duygu_kimligi = find_or_create_neuron("kavram", "isim", duygu_adi, "kurulum_tohum_duygu", {"tip":"duygu_etiketi"});
+        find_or_create_relationship(analiz_parcacik_kimligi, duygu_kimligi, "duygu_cikarimi_yapar", "kurulum_tohum_hiyerarsi");
+    # if ego_dugumu_kimligi: find_or_create_relationship(siir_parcacik_kimligi, ego_dugumu_kimligi, "cekirdek_degerle_ilgili", ...);
+    # Ego ile ilişki opsiyonel
+    print("      ...Hiyerarşik örnek tamamlandı.")
+
+    print("\n   [OK] Tüm başlangıç girdileri tamamlandı.")
+except AssertionError as e:
+    print(f"HATA: Başlangıç adımında bir varlık oluşturulamadı/bulunamadı: {e}")
+    traceback.print_exc();
+    sys.exit(1);
+except Exception as e:
+    print(f"HATA: Başlangıç adımları sırasında genel hata: {e}")
+    traceback.print_exc(); sys.exit(1);
+finally:
+     if daal and daal.client: daal.close_connection()
+
+time.sleep(1)
+print(">>> Adım 5/5: Tamamlandı.")

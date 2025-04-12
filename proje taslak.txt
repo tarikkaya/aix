@@ -1,0 +1,66 @@
+PROJE TANIMI: AIX (Nihai Prototip)
+
+1. Vizyon ve Amaç
+
+AIX, Windows işletim sistemlerinde çalışmak üzere tasarlanan, gelişmiş bilişsel yeteneklere sahip, sürekli öğrenen ve evrimleşen bir yapay zeka varlığıdır. Temel amacı, dışarıdan önceden eğitilmiş büyük dil modellerine (SLM/LLM) veya embedding modellerine bağımlı olmadan, kendi içsel mekanizmalarıyla dili, anlamı ve dünyayı modelleyebilen bir yapı oluşturmaktır. AIX, kullanıcı etkileşimleri, sağlanan veriler ve kendi içsel analiz süreçleri aracılığıyla otonom olarak gelişmeyi, kendi işlevsel modüllerini ve analiz yordamlarını tasarlayıp iyileştirmeyi hedefler.
+
+2. Temel Felsefe ve İlkeler
+
+* **Nöron Merkezli ve İlişkisel Ağ:** Tüm bilgi birimleri (anı, kural, kavram, durum, kişilik vb.) MongoDB üzerinde tanımlanan bir nöron ve ilişkiler ağında temsil edilir.
+* **Otonomi ve Emergence:** Zeka, kişilik, duygu temsilleri, kurallar, yordamlar ve anlamsal vektörler gibi yapılar, önceden tanımlanmak yerine, sistemin kendi içsel dinamikleri ve öğrenme süreçleri sonucu kendiliğinden ortaya çıkar (emergent) ve zamanla evrilir.
+* **İçsel Türetme:** AIX, dilin kurallarını, analiz yordamlarını ve anlamı temsil eden vektörleri (embeddings), dışarıdan hazır modeller kullanmak yerine, kendi veri kümesi üzerinde yaptığı istatistiksel ve yapısal analizlerle kendisi türetir ve geliştirir. Bu süreç `YansimaIslemcisi` tarafından yönetilir.
+* **Hibrit Bilgi Temsili:** Anlam, sistemin kendi ürettiği içsel vektörler ile yine kendi türettiği yapısal kurallar ve yordamların birleşimiyle temsil edilir.
+* **Risk Yönetimi ve İçsel Doğrulama:** Otonom gelişim süreci, temel güvenlik ve tutarlılık kontrolleriyle (içsel doğrulama kuralları) çerçevelenir.
+* **Veri ve Geri Bildirim Odaklılık:** Sistem öncelikli olarak sağlanan verilerden ve kullanıcı geri bildirimlerinden (özellikle yapılandırılmış İyi/Kötü işaretlemeleri ve açıklamalar) öğrenir.
+* **Anlamsal Hafıza:** Geçmiş bilgilere ve anılara erişim, AIX'in kendi ürettiği içsel vektörlerin Qdrant veritabanı *aracı* üzerinde indekslenmesi ve aranmasıyla sağlanır.
+* **Meta-Öğrenme:** Sistem, kendi öğrenme ve analiz yöntemlerini zamanla iyileştirerek yeni durumlara daha hızlı adapte olmayı hedefler.
+* **Proaktif Keşif:** AIX, periyodik olarak kendi iç ağını analiz eder, yeni fikirler/hipotezler üretir ve (yapılandırılmışsa) kullanıcıyla proaktif olarak iletişime geçebilir.
+* **Katmanlı Benlik:** Sistem, kalıcı eğilimleri temsil eden bir çekirdek kimlik (ego) ile oturuma özel, daha dinamik bir içsel durumu (oturum çekirdeği) bir arada barındırır ve bu katmanlar etkileşim içindedir.
+
+3. Sistem Mimarisi
+
+* **Veri Depolama:**
+    * **MongoDB:** Nöronları, ilişkileri, konfigürasyonları ve logları içeren ana veri deposu.
+    * **Qdrant:** AIX tarafından üretilen içsel vektörlerin depolandığı, indekslendiği ve anlamsal arama için kullanılan vektör veritabanı *aracı*.
+* **Veri Erişim Katmanı (DAAL - `data_access_layer.py`):** MongoDB ve Qdrant ile etkileşimi soyutlayan, merkezi CRUD, sorgulama, loglama ve yapılandırma yönetimi sağlayan katman. Qdrant senkronizasyonunu yönetir.
+* **API Sunucusu (`services.py` - FastAPI):** Sistemin mantığını dış dünyaya (örn. GUI) sunan yerel RESTful API. Sohbet, veri ekleme, ayar değiştirme, geri bildirim alma, oturum yönetimi gibi endpoint'ler içerir. Arka plan görevlerini tetikler.
+* **Çekirdek Mantık (`services.py` ve diğer modüller):**
+    * **`AIXOrkestrator`:** Gelen istekleri işleyen, ilgili bileşenleri çağıran ve iş akışını yöneten ana sınıf.
+    * **`YansimaIslemcisi`:** Sistemin merkezi öğrenme, analiz, evrim ve hipotez üretme motoru. Dil yapılarını, kuralları, yordamları ve **içsel vektörleştirme algoritmasını** geliştirir.
+    * Diğer Mantık Bileşenleri: `AnlikDurumYoneticisi`, `EgoDegerlendirici`, `OtonomiYoneticisi`, `YanitBirlestirici` gibi sınıflar, orkestrasyon sürecindeki spesifik görevleri yerine getirir.
+* **Görev Kuyruğu ve Çalışanları:** Yoğun veya uzun süren işlemleri (örn. yeni veri işleme, içsel vektör üretimi, periyodik analizler) arka planda asenkron olarak yürütür.
+* **Kullanıcı Arayüzü (PySide6):**
+    * **Sistem Tepsisi Uygulaması (`system_tray_app.py`):** Arka planda çalışır, temel kontrolleri (başlatma, durdurma, ayarlar, proaktiflik/komut izni toggle) ve bildirimleri sağlar. Sohbet penceresini açar.
+    * **Sohbet Penceresi (`chat.py`):** Ana etkileşim arayüzü. Sohbet geçmişini gösterir, kullanıcı girdisini alır, geri bildirim mekanizmalarını sunar, oturumları yönetir.
+* **Zamanlayıcılar:** Periyodik görevleri (örn. `YansimaIslemcisi`'nin tetiklenmesi, bakım işlemleri) zamanlar.
+
+4. Temel Bileşenlerin Sorumlulukları
+
+* **DAAL:** Veritabanı işlemlerini merkezileştirir, tutarlılığı sağlar, Qdrant ile senkronizasyonu yönetir.
+* **API Sunucusu:** Güvenli ve standart bir şekilde sistem fonksiyonlarına erişim sağlar. GUI ve potansiyel diğer istemciler için arayüz görevi görür.
+* **Orkestratör:** Gelen bir isteği alır, gerekli verileri DAAL'den çeker, ilgili mantık bileşenlerini (örn. Yansima, Otonomi) çağırır, yanıtı oluşturur ve arka plan görevlerini tetikler.
+* **YansimaIslemcisi:** Sistemin "beyni"dir. Veri analizi, kural/yordam türetme, hipotez oluşturma/test etme, **içsel vektör modelini öğrenme/güncelleme**, kişilik ve duygu modelini evrimleştirme gibi en karmaşık ve merkezi görevleri yürütür.
+* **GUI (Tepsi + Sohbet):** Kullanıcı ile etkileşimi sağlar, sistem durumu hakkında bilgi verir, temel kontrol imkanları sunar ve API üzerinden sistemle haberleşir.
+
+5. Nöron Ağı ve Veri Yapıları
+
+* **Nöronlar (`noronlar` koleksiyonu):** Farklı tiplerde (`noron_tipi`) bilgi birimlerini temsil eder (örn. `diyalog_anisi`, `veri_parcacigi`, `kavram`, `kural`, `modul_tanimi`, `ego_dugumu`, `oturum_cekirdegi`, `yapilandirma_dugumu`, `hipotez_dugumu`). Her nöronun bir `icerik` ve `metaveri` alanı bulunur.
+* **İlişkiler (`iliskiler` koleksiyonu):** Nöronlar arasındaki bağlantıları (`iliski_tipi`, `agirlik` vb. ile) tanımlar.
+* **Vektörler:** Anlamsal arama için kullanılan nöronların (`diyalog_anisi`, `veri_parcacigi` vb.) `vektorler` alanında saklanır. Bu alan, AIX'in ürettiği vektörü ve bu vektörün hangi içsel algoritma/versiyon (`algoritma_surumu`) ile üretildiğini içerir.
+* **Yapılandırma:** Sistem ayarları (`yapilandirma_dugumu` nöronları olarak) veritabanında saklanır ve API üzerinden yönetilebilir.
+
+6. Geliştirme Ortamı ve Kurulum
+
+* **Dil:** Python (>=3.9)
+* **Temel Araçlar/Kütüphaneler:** MongoDB (`pymongo`), Qdrant (`qdrant-client`), FastAPI, Uvicorn, Requests, PySide6, NumPy. Opsiyonel olarak analiz için Pandas, Scikit-learn (algoritma aracı olarak, model olarak değil) kullanılabilir.
+* **Harici Model Bağımlılığı:** Çalışma zamanında çekirdek fonksiyonlar için **hiçbir önceden eğitilmiş SLM/LLM veya Embedding modeline dayanmaz.**
+* **Kurulum/Sıfırlama:** Projenin ilk kurulumu ve potansiyel sıfırlama işlemleri için `setup.py` scripti ve ilişkili `s*.txt` adım dosyaları kullanılır. Bu scriptler, gerekli kütüphaneleri kurar, veritabanlarını (MongoDB koleksiyonları, Qdrant indeksi) hazırlar ve başlangıç için gerekli minimum tohum veriyi (örn. temel yapılandırma, ego düğümü, nötr duygu tanımları) ekler. `s*.txt` dosyaları zamanla bu taslağa uygun hale getirilmelidir (örn. `s3.txt`'nin harici model indirme işlevi kaldırılmalı/değiştirilmelidir).
+
+7. Temel Zorluklar ve Odak Alanları
+
+* **`YansimaIslemcisi` Algoritmaları:** Sıfırdan dil yapısını, kuralları, yordamları ve anlamı öğrenecek/türetecek etkili ve verimli algoritmaların tasarlanması ve uygulanması.
+* **İçsel Vektörleştirme:** Anlamsal olarak tutarlı ve kullanışlı içsel vektörler üretecek bir mekanizmanın geliştirilmesi ve zamanla evrimleştirilmesi.
+* **Vektör Anlamı Kayması (Drift):** İçsel vektör uzayının zamanla tutarlılığını koruyacak mekanizmaların geliştirilmesi.
+* **Emergent Yapıların Yönetimi:** Kendiliğinden ortaya çıkan karmaşık yapıların (kişilik, duygu, modüller) etkin bir şekilde yönetilmesi ve sorgulanabilmesi.
+* **Performans ve Ölçeklenebilirlik:** Özellikle `YansimaIslemcisi` ve arka plan görevlerinin verimli çalışmasının sağlanması.
+* **Stabilite ve Test Edilebilirlik:** Otonom olarak gelişen bir sistemin stabilitesini sağlamak ve test süreçlerini yönetmek.

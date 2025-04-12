@@ -1,0 +1,68 @@
+# s1.txt
+# Temel ön koşulları kontrol eder (Python, OS, config).
+
+import sys
+import platform
+import time
+import os
+import configparser
+import traceback
+
+print(">>> Adım 1/6: Ön koşullar kontrol ediliyor...") # Adım sayısını 6 varsayıyoruz (s6 dahil)
+
+# 1. Python Versiyon Kontrolü
+min_py_version = (3, 9) # Gerekli minimum Python versiyonu
+if sys.version_info < min_py_version:
+    print(f"HATA: Gerekli minimum Python sürümü {min_py_version[0]}.{min_py_version[1]}. Tespit edilen: {sys.version}")
+    sys.exit(1) # Hata koduyla çık
+print(f"   [OK] Python Versiyonu ({sys.version.split()[0]})")
+
+# 2. İşletim Sistemi Kontrolü
+if platform.system() != "Windows":
+    # Proje sadece Windows için tasarlandığından hata verip çıkmak daha doğru olabilir.
+    print(f"HATA: Bu proje sadece Windows işletim sistemi için tasarlanmıştır. Tespit edilen: {platform.system()}")
+    sys.exit(1)
+else:
+     print(f"   [OK] İşletim Sistemi ({platform.system()} {platform.release()})")
+
+# 3. Config Dosyası Kontrolü
+config_file_path = 'config.ini'
+if not os.path.exists(config_file_path):
+    print(f"HATA: Kurulum için gerekli '{config_file_path}' dosyası bulunamadı!")
+    sys.exit(1)
+print(f"   [OK] '{config_file_path}' bulundu.")
+
+# 4. Config Dosyasının Temel Bölümlerini Kontrol Et
+try:
+    config = configparser.ConfigParser(); config.optionxform = str;
+    read_files = config.read(config_file_path, encoding='utf-8')
+    if not read_files: # Dosya okunamadıysa
+        raise configparser.Error(f"'{config_file_path}' dosyası okunamadı veya boş.")
+
+    # Zorunlu bölümlerin ve anahtarların varlığını kontrol et
+    assert config.has_section('MongoDB'), "Config [MongoDB] bölümü eksik!"
+    assert config.has_option('MongoDB', 'uri'), "[MongoDB] 'uri' eksik!"
+    assert config.has_option('MongoDB', 'database_name'), "[MongoDB] 'database_name' eksik!"
+    # Qdrant ve Embedding geri geldiği için Qdrant bölümünü de kontrol edelim
+    assert config.has_section('Qdrant'), "Config [Qdrant] bölümü eksik!"
+    assert config.has_option('Qdrant', 'local_path'), "[Qdrant] 'local_path' eksik!"
+    assert config.has_option('Qdrant', 'embedding_dimension'), "[Qdrant] 'embedding_dimension' eksik!"
+    assert config.has_section('Server'), "[Server] bölümü eksik!"
+    assert config.has_option('Server', 'port'), "[Server] 'port' eksik!"
+    # Settings ve Paths bölümleri opsiyonel olabilir, kontrol etmeyelim
+    print("   [OK] Temel config.ini yapısı doğrulandı.")
+except AssertionError as e:
+    print(f"HATA: config.ini dosyasında eksik/hatalı bölüm veya anahtar: {e}")
+    sys.exit(1)
+except configparser.Error as e:
+    print(f"HATA: config.ini dosyası okunurken hata: {e}")
+    sys.exit(1)
+except Exception as e:
+    print(f"HATA: config.ini kontrolü sırasında beklenmedik hata: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+
+# MongoDB erişim kontrolü s3'te yapılacak.
+
+time.sleep(1)
+print(">>> Adım 1/6: Tamamlandı.")

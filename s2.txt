@@ -1,0 +1,53 @@
+# s2.txt
+# Python bağımlılıklarını requirements.txt kullanarak kurar.
+
+import subprocess
+import sys
+import os
+import time
+import traceback
+
+print(">>> Adım 2/6: Python bağımlılıkları kuruluyor ('requirements.txt')...") # Adım sayısını 6 varsayıyoruz
+
+req_file = 'requirements.txt'
+if not os.path.exists(req_file):
+    print(f"HATA: Kurulum için gerekli '{req_file}' dosyası bulunamadı!")
+    sys.exit(1) 
+
+try:
+    print(f"   '{req_file}' içeriği kuruluyor...")
+    # check=True kullanarak hata durumunda doğrudan exception fırlatmasını sağla
+    # capture_output=True ile çıktıları yakala (hata durumunda göstermek için)
+    # encoding='utf-8' ile Türkçe karakter sorunlarını önle
+    result = subprocess.run(
+        [sys.executable, '-m', 'pip', 'install', '-r', req_file], 
+        capture_output=True, 
+        text=True,              # Çıktıyı metin olarak al
+        check=True,             # Hata kodu varsa exception fırlat
+        encoding='utf-8'        # Çıktı encoding'i
+    ) 
+    
+    # Başarılı kurulumda standart çıktıyı göstermek genellikle gereksizdir
+    # print("------- PIP STDOUT BAŞLANGICI -------")
+    # print(result.stdout)
+    # print("-------- PIP STDOUT SONU --------")
+    print(f"   [OK] Bağımlılıklar başarıyla kuruldu/güncellendi.")
+        
+except FileNotFoundError: 
+    print(f"HATA: Python çalıştırılabilir ('{sys.executable}') veya pip bulunamadı!")
+    sys.exit(1)
+except subprocess.CalledProcessError as e:
+    # pip komutu sıfırdan farklı bir kodla biterse (hata oluşursa) burası çalışır.
+    print(f"HATA: Bağımlılıklar kurulurken hata oluştu! Çıkış kodu: {e.returncode}")
+    print(f"      Komut: {' '.join(e.cmd)}")
+    print("------- PIP STDERR (Hata Detayları) -------")
+    print(e.stderr) # Hata mesajını yazdır
+    print("-----------------------------------------")
+    sys.exit(1) # Hata koduyla çık
+except Exception as e:
+    print(f"HATA: Bağımlılık kurulumu sırasında beklenmedik genel hata: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+
+time.sleep(1)
+print(">>> Adım 2/6: Tamamlandı.")

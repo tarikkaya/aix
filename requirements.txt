@@ -1,0 +1,39 @@
+# requirements.txt
+# AIX projesi için gerekli Python kütüphaneleri
+
+# Temel Bağımlılıklar
+numpy>=1.20
+
+# Veritabanı ve Vektör Arama
+pymongo>=4.0 
+qdrant-client>=1.7 # Qdrant istemcisi
+
+# Embedding Modelleri (Yapılandırılabilir Kaynak İçin)
+sentence-transformers>=2.2 # Embedding için
+# Not: torch/tensorflow ve transformers gibi alt bağımlılıkları otomatik kurar.
+
+# API Sunucusu (services.py için)
+fastapi>=0.95 
+uvicorn[standard]>=0.20 
+
+# API İstemcisi (GUI'ler vb. için)
+requests>=2.25 
+# Alternatif (Asenkron): httpx>=0.23
+
+# GUI ve OS Entegrasyonu (Windows)
+PySide6>=6.5 
+plyer>=2.1 # Bildirimler için (opsiyonel)
+
+# Syntax Highlighting
+Pygments>=2.10 # Kod bloğu gösterimi için
+
+# Zamanlama/Arka Plan Görevleri
+# threading (standart)
+# schedule? (opsiyonel)
+
+# Komut Çalıştırma
+# subprocess (standart)
+
+# Opsiyonel (Analiz/ML)
+# pandas
+# scikit-learn

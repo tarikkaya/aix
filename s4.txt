@@ -1,0 +1,164 @@
+# s4.txt
+# MongoDB veritabanını temizler, koleksiyonları ve indeksleri oluşturur.
+# Qdrant veri dizinini ve koleksiyonunu hazırlar.
+# DAAL katmanının import edilebilir olduğunu varsayar.
+
+import sys
+import time
+import os
+import traceback
+
+try:
+    # DAAL'ı ve pymongo'yu import et (indeksler için)
+    # Qdrant modellerini de import edelim (recreate_collection için)
+    from data_access_layer import DataAccessLayer, QDRANT_COLLECTION_NAME
+    import pymongo
+    from qdrant_client.http import models as qdrant_models
+    # Qdrant kütüphanesinin varlığını kontrol etmek için DAAL'den gelen sabiti kullan
+    from data_access_layer import QDRANT_AVAILABLE 
+except ImportError:
+    print("HATA: DataAccessLayer veya bağımlılıkları import edilemedi! (s2 adımını kontrol edin)")
+    sys.exit(1)
+
+print(">>> Adım 4/6: Veritabanı/Qdrant Temizleme, Koleksiyon/İndeks Oluşturma...") # Adım sayısı 6
+
+daal = None
+try:
+    print("   DAAL başlatılıyor...")
+    daal = DataAccessLayer() # config.ini'yi kullanır
+    if not daal.is_connected(): # Sadece MongoDB bağlantısını kontrol eder
+        raise ConnectionError("DAAL MongoDB'ye bağlanamadı!")
+    db_name = daal.db_name
+
+    # 1. MongoDB Koleksiyonlarını Temizleme
+    print(f"   '{db_name}' veritabanındaki AIX koleksiyonları temizleniyor...");
+    collections_to_drop = ['noronlar', 'iliskiler', 'gunluk_kayitlari'] # Türkçe koleksiyon isimleri
+    dropped_count = 0
+    if daal.db:
+        for col_name in collections_to_drop:
+            if col_name in daal.db.list_collection_names():
+                try:
+                    daal.db[col_name].drop()
+                    print(f"      '{col_name}' koleksiyonu silindi.")
+                    dropped_count += 1
+                except Exception as drop_e:
+                     print(f"UYARI: '{col_name}' koleksiyonu silinirken hata: {drop_e}")
+        print(f"      ...{dropped_count} MongoDB koleksiyonu temizlendi.")
+    else:
+        print("   UYARI: MongoDB bağlantısı olmadığından koleksiyonlar temizlenemedi.")
+
+    # 2. Qdrant Koleksiyonunu Temizleme/Yeniden Oluşturma
+    if daal.qdrant_client and QDRANT_AVAILABLE and qdrant_models:
+        print(f"   Qdrant koleksiyonu ('{QDRANT_COLLECTION_NAME}') temizleniyor/yeniden oluşturuluyor...")
+        try:
+             qdrant_vectors_config = qdrant_models.VectorParams(
+                 size=daal.embedding_dimension, # DAAL init'te config'den okunan boyut
+                 distance=qdrant_models.Distance.COSINE
+             )
+             # Koleksiyonu yeniden oluşturmak en temiz başlangıcı sağlar
+             daal.qdrant_client.recreate_collection(
+                 collection_name=QDRANT_COLLECTION_NAME,
+                 vectors_config=qdrant_vectors_config
+                 # Gerekirse diğer Qdrant ayarları (örn. on_disk_payload=True) eklenebilir
+             )
+             print(f"      [OK] '{QDRANT_COLLECTION_NAME}' Qdrant koleksiyonu yeniden oluşturuldu.")
+        except Exception as qe:
+             print(f"HATA: Qdrant koleksiyonu oluşturulurken/temizlenirken hata: {qe}")
+             # Bu kritik bir hata olabilir, kuruluma devam etmemek daha iyi olabilir
+             # sys.exit(1)
+    elif QDRANT_AVAILABLE:
+         print("   UYARI: Qdrant istemcisi başlatılamadığı için Qdrant koleksiyonu hazırlanamadı (path/config hatası olabilir).")
+    else:
+         print("   UYARI: Qdrant kütüphanesi kurulu olmadığı için Qdrant koleksiyonu hazırlanamıyor.")
+
+    time.sleep(1)
+
+    # 3. MongoDB İndeksleri Oluşturma
+    print("   Gerekli MongoDB koleksiyonları kontrol ediliyor ve indeksler oluşturuluyor...")
+    neurons_col = daal.get_neurons_collection()
+    rels_col = daal.get_relationships_collection()
+    logs_col = daal.get_log_collection()
+    index_errors = 0
+
+    if neurons_col is not None:
+        try:
+            # Türkçe alan adlarına göre indeksler
+            neurons_col.create_index([("noron_tipi", pymongo.ASCENDING)], name="idx_tip")
+            neurons_col.create_index([("metaveri.olusturulma_zamani", pymongo.DESCENDING)], name="idx_olusturulma")
+            neurons_col.create_index([("metaveri.durum", pymongo.ASCENDING)], name="idx_durum", sparse=True)
+            neurons_col.create_index([("icerik.parametre_adi", pymongo.ASCENDING)],
+                                     partialFilterExpression={"noron_tipi": "yapilandirma_dugumu"}, name="idx_config_param", unique=True)
+            neurons_col.create_index([("metaveri.oturum_kimligi", pymongo.ASCENDING)],
+                                     partialFilterExpression={"noron_tipi": "oturum_cekirdegi"}, name="idx_oturum_cekirdegi", unique=True, sparse=True)
+            # dialogue_memory için orijinal oturum ID'si
+            neurons_col.create_index([("metaveri.oturum_kimligi", pymongo.ASCENDING)],
+                                     partialFilterExpression={"noron_tipi": "diyalog_anisi"}, name="idx_diyalog_oturum", sparse=True)
+            # İsimlendirilmiş Nöronlar
+            neurons_col.create_index([("icerik.isim", pymongo.ASCENDING)],
+                                     partialFilterExpression={"noron_tipi": {"$in": ["kavram", "modul_tanimi", "duygu_tanimi", "ruh_hali_tanimi"]}},
+                                     name="idx_isimli_dugumler", sparse=True)
+            print("      'noronlar' koleksiyonu indeksleri oluşturuldu.")
+        except Exception as e:
+            print(f"HATA: 'noronlar' indeksleri oluşturulurken hata: {e}")
+            index_errors+=1
+
+    if rels_col is not None:
+         try:
+             # Türkçe alan adlarına göre indeksler
+             rels_col.create_index([("kaynak_noron_kimligi", pymongo.ASCENDING)], name="idx_iliski_kaynak")
+             rels_col.create_index([("hedef_noron_kimligi", pymongo.ASCENDING)], name="idx_iliski_hedef")
+             rels_col.create_index([("iliski_tipi", pymongo.ASCENDING)], name="idx_iliski_tip")
+             rels_col.create_index([("kaynak_noron_kimligi", 1), ("iliski_tipi", 1)], name="idx_iliski_kaynak_tip")
+             rels_col.create_index([("hedef_noron_kimligi", 1), ("iliski_tipi", 1)], name="idx_iliski_hedef_tip")
+             print("      'iliskiler' koleksiyonu indeksleri oluşturuldu.")
+         except Exception as e:
+            print(f"HATA: 'iliskiler' indeksleri oluşturulurken hata: {e}")
+            index_errors+=1
+
+    if logs_col is not None:
+         try:
+             # Türkçe alan adlarına göre indeksler
+             logs_col.create_index([("zaman_damgasi", pymongo.DESCENDING)], name="idx_gunluk_zaman")
+             logs_col.create_index([("kaynak_bilesen", pymongo.ASCENDING)], name="idx_gunluk_kaynak")
+             logs_col.create_index([("olay_tipi", pymongo.ASCENDING)], name="idx_gunluk_olay")
+             logs_col.create_index([("seviye", pymongo.ASCENDING)], name="idx_gunluk_seviye")
+             print("      'gunluk_kayitlari' koleksiyonu indeksleri oluşturuldu.")
+         except Exception as e:
+            print(f"HATA: 'gunluk_kayitlari' indeksleri oluşturulurken hata: {e}")
+            index_errors+=1
+
+    if index_errors == 0:
+        print("   [OK] MongoDB İndeksleri tamamlandı.")
+    else:
+        print(f"UYARI: {index_errors} indeks oluşturma hatası oluştu! Bu durum performansı etkileyebilir.")
+        # Hata varsa kurulum durdurulabilir: sys.exit(1)
+
+    # 4. Qdrant Veri Dizininin Oluşturulması
+    print("   Qdrant veri dizini kontrol ediliyor/oluşturuluyor...")
+    qdrant_path = daal.qdrant_path
+    if qdrant_path:
+        try:
+            os.makedirs(qdrant_path, exist_ok=True)
+            print(f"      [OK] Qdrant veri dizini '{qdrant_path}' hazır.")
+        except Exception as e:
+            print(f"HATA: Qdrant veri dizini '{qdrant_path}' oluşturulamadı: {e}")
+            # Bu kritik olabilir, Qdrant çalışmayabilir.
+            # sys.exit(1)
+    else:
+        # Qdrant path config'de yoksa veya DAAL init'te hata olduysa
+        print("   UYARI: Qdrant veri yolu tanımlı değil veya oluşturulamadı. Qdrant kullanılamayacak.")
+
+except ConnectionError as e:
+    print(f"HATA: MongoDB bağlantı hatası: {e}")
+    sys.exit(1)
+except Exception as e:
+    print(f"HATA: Veritabanı kurulum adımı sırasında genel hata: {e}")
+    traceback.print_exc()
+finally:
+     # Her durumda bağlantıyı kapatmayı dene
+     if daal and daal.client:
+        try: daal.close_connection()
+        except: pass
+
+time.sleep(1)
+print(">>> Adım 4/6: Tamamlandı.")

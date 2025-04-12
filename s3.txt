@@ -1,0 +1,107 @@
+# s3.txt
+# Bağımlılıklar kurulduktan sonra MongoDB bağlantısını test eder
+# ve (yapılandırılmışsa) gerekli embedding modelini indirir/kontrol eder.
+
+import os
+import time
+import sys
+import configparser
+import traceback
+
+print(">>> Adım 3/6: MongoDB Bağlantısı Testi ve Embedding Modeli Hazırlığı...") # Adım sayısı 6
+
+# 1. MongoDB Bağlantı Testi
+try:
+    # Bu kütüphane s2'de kurulmuş olmalı
+    import pymongo
+    from pymongo.errors import ConnectionFailure, ConfigurationError
+    
+    print("   MongoDB bağlantısı test ediliyor...")
+    config = configparser.ConfigParser(); config.optionxform = str;
+    config_path = 'config.ini' # Varlığını s1'de kontrol ettik
+    config.read(config_path, encoding='utf-8');
+    mongo_uri = config.get('MongoDB', 'uri') # s1'de varlığı kontrol edildi
+    
+    # Bağlantıyı kurmayı ve bir komut göndermeyi dene
+    client = pymongo.MongoClient(mongo_uri, serverSelectionTimeoutMS=5000); # Timeout süresi artırılabilir
+    client.admin.command('ping'); 
+    client.close(); # Test sonrası bağlantıyı hemen kapat
+    print(f"   [OK] MongoDB Erişimi ({mongo_uri})")
+
+except ImportError: 
+    print("HATA: pymongo kütüphanesi yüklenemedi (s2 adımını kontrol edin)!")
+    sys.exit(1)
+except (ConnectionFailure, ConfigurationError) as e: 
+    print(f"HATA: MongoDB'ye bağlanılamadı ({mongo_uri}). Sunucunun çalıştığından ve URI'nin doğru olduğundan emin olun! Hata: {e}")
+    sys.exit(1)
+except (configparser.Error, KeyError) as e: 
+    # Bu hata normalde s1'de yakalanmalı ama yine de kontrol edelim
+    print(f"HATA: config.ini [MongoDB] bölümü veya 'uri' anahtarı okunamadı: {e}")
+    sys.exit(1)
+except Exception as e: 
+    print(f"HATA: MongoDB bağlantı testi sırasında beklenmedik hata: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+
+time.sleep(1)
+
+# 2. Embedding Modelini İndirme/Kontrol Etme
+model_name_or_path = None # Hata durumunda loglamak için dışarıda tanımla
+try:
+    # sentence-transformers kütüphanesi s2'de kurulmuş olmalı
+    from sentence_transformers import SentenceTransformer
+    
+    config = configparser.ConfigParser(); config.optionxform = str;
+    config_path = 'config.ini'
+    config.read(config_path, encoding='utf-8')
+    
+    # Embedding kaynağı config'de belirtilmiş mi? Türkçe anahtarı kullan
+    model_name_or_path = config.get('Settings', 'YapilandirilmisEmbeddingModeliAdiVeyaYolu', fallback=None) 
+    cache_path = './embedding_model_cache' # Varsayılan cache yolu
+    try:
+        cache_path = config.get('Paths','embedding_model_cache', fallback=cache_path)
+    except (configparser.NoSectionError, configparser.NoOptionError):
+         print(f"   [UYARI] config.ini [Paths]/embedding_model_cache bulunamadı. Varsayılan '{cache_path}' kullanılacak.")
+
+    # Model adı/yolu geçerliyse modeli yüklemeyi/indirmeyi dene
+    if model_name_or_path and model_name_or_path.strip() and model_name_or_path.strip().lower() != 'none':
+        print(f"   Embedding modeli ({model_name_or_path}) kontrol ediliyor/indiriliyor...")
+        print(f"   (İndirme/Yükleme Yolu: {cache_path})")
+        
+        # Cache dizinini oluştur (varsa hata vermez)
+        if not os.path.exists(cache_path): 
+            try:
+                os.makedirs(cache_path, exist_ok=True)
+                print(f"      Cache dizini oluşturuldu: {cache_path}")
+            except Exception as dir_e:
+                 print(f"HATA: Embedding cache dizini '{cache_path}' oluşturulamadı: {dir_e}")
+                 sys.exit(1)
+                 
+        # Modeli yüklemeyi dene (yoksa indirir)
+        try:
+            # Modeli yükle ve basit bir test yap
+            model = SentenceTransformer(model_name_or_path, cache_folder=cache_path) 
+            _ = model.encode(["test"]) # Yüklenip çalıştığını doğrulamak için basit test
+            print(f"   [OK] Embedding modeli '{model_name_or_path}' başarıyla yüklendi/doğrulandı.")
+        except Exception as model_e:
+             print(f"HATA: Embedding modeli '{model_name_or_path}' indirilirken/yüklenirken hata oluştu!")
+             print(f"      Detay: {model_e}")
+             print(f"      Lütfen model adının/yolunun ('{model_name_or_path}') doğruluğunu,")
+             print(f"      'sentence-transformers' kütüphanesinin düzgün kurulduğunu")
+             print(f"      ve internet bağlantınızı kontrol edin.")
+             sys.exit(1) # Model yükleme hatası kritik, devam etme
+             
+    else:
+        print("   [BİLGİ] Yapılandırmada ('YapilandirilmisEmbeddingModeliAdiVeyaYolu') embedding modeli belirtilmemiş.")
+        print("   Bu adım atlanıyor. Anlamsal arama ve embedding gerektiren özellikler çalışmayacaktır.")
+
+except ImportError: 
+    print("HATA: sentence-transformers kütüphanesi yüklenemedi! (s2 adımını kontrol edin)")
+    sys.exit(1)
+except Exception as e: 
+    print(f"HATA: Embedding modeli hazırlığı sırasında beklenmedik hata: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+
+time.sleep(1)
+print(">>> Adım 3/6: Tamamlandı.")
