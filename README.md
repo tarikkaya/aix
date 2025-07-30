@@ -1,74 +1,99 @@
-# AIX: An Agnostic AI Coalition Framework
+# AIX: An Agnostic Intelligence Coalition Framework
 
-AIX is not just another AI application; it is a **meta-framework** for architecting, managing, and interacting with bespoke coalitions of AI agents. It operates as a highly flexible and introspective environment, providing you with the foundational blueprint to build your own AGI-like system. Here, you are the architect—you define the structure, purpose, and interactions of every cognitive component.
+> ⚠️ **Experimental Notice**  
+> Prototype created in Google AI Studio via declarative prompts. This project has **not undergone systematic testing or fine-tuning**; extensive refinement is required before any production use.
 
-**Disclaimer:** This is an experimental project and has not been thoroughly tested. Use it as a learning tool and a foundation for your own development.
+## 🧱 Core Concepts
 
-## Getting Started
+### 🏛️ Rooms & Coalition Logic
 
-This project is a standard React/Vite application. The only requirement is a current version of Node.js and npm.
+Rooms group Units by specialization and host a Manager Unit for lifecycle control. Coalitions form when Rooms cooperate, synchronized by the Communication Room.
 
-1.  **Clone the Repository**:
-    ```bash
-    git clone <repository_url>
-    cd <repository_directory>
-    ```
+#### Room Types
 
-2.  **Install Dependencies**:
-    This single command installs all necessary libraries for the framework to run.
-    ```bash
-    npm install
-    ```
+- **Admin Room**  
+  - First entry point for user messages.  
+  - Manager Unit forwards tasks to the Communication Room’s Manager.  
+  - Includes a Unit for creating, editing, and deleting other Units.
 
-3.  **Run the Development Server**:
-    This command starts the local development server.
-    ```bash
-    npm run dev
-    ```
-    The application will be available at `http://localhost:5173`.
+- **Communication Room**  
+  - Coordinates open/close loops and propagates directives across Rooms via its Manager Unit.  
+  - Implements a stepping mechanism: the Admin Room’s manager can wake each coalition Unit in turn, collect its response, then return it to sleep.
 
-### A Note on AI Models
-The framework UI will run without any AI models connected. However, the *default configuration* of the units is pre-wired to use local AI services via **Ollama**. To use the framework 'out-of-the-box' with its initial setup, you will need Ollama running on your machine. You are free to change the providers for each unit to cloud-based services in the UI at any time.
+- **Thought Room**  
+  - Central reasoning hub; issues decisions that trigger actions in other Rooms.  
+  - Hosts: Emotional Motor Units, a Self-Interest Unit with subordinate Ethics Unit, a Hypothesis Generator, and a Psychosocial Profile Unit (dreams, motivation, libido, personality traits, values, mood, user bio).
 
-## The Core Philosophy: A Canvas for Your Ideas
+- **Information Room**  
+  - Stores knowledge with paired RAG Units and RAG Bases.  
+  - Hosts Digging Units to excavate deep insights from document neurons.  
+  - Includes a System Profiler Unit to query and record host environment details.
 
-This project is fundamentally **agnostic by design**. Its core purpose is to be a blank canvas that can adapt to **any conceptual model or cognitive architecture you can envision**. Whether your goal is to build a hierarchical collective, a competitive ecosystem of agents, or a model based on esoteric psychology, AIX provides the tools to structure that vision.
+- **Visual Room**  
+  - Contains VLM and Stable Diffusion Units for stage-by-stage image interpretation and generation.
 
-## Your Framework, Your Vision
+- **Voice Room**  
+  - Performs layered analysis of incoming speech and layered audio synthesis.
 
-AIX is not a ready-to-use, polished application. It is a foundational framework intended to be a starting point. You are strongly encouraged to **fork this repository, edit the code, and develop the framework to suit your own unique concepts**. Change the units, redefine the rooms, and build the AI you want to see.
+- **Sanction Room**  
+  - Enforces actions decided by the Thought Room.  
+  - Contains:  
+    - Desktop Control Unit (inspects GUI elements, background, object positions, current state, emojis)  
+    - Sanction Units (apply and reapply penalties)  
+    - Responder Unit (communicates results back to the user)  
+    - Sanction Manager Unit
 
-## Key Features
+### 🧠 Units
 
-*   **Dynamic Coalition Structure**: Add, remove, and configure AI units on the fly.
-*   **Hierarchical Management**: Rooms provide a logical separation of concerns.
-*   **Deep Unit Configuration**: Fine-tune the LLM provider, model, prompts, and memory systems for each individual unit.
-*   **Flexible RAG (Retrieval-Augmented Generation)**: Built-in support for RAG units, including client-side document ingestion (`.pdf`, `.docx`, `.txt`) and a choice of vector stores and rerankers (including a zero-configuration embedded model).
-*   **Drive Units**: Special units that model the AGI's internal state (e.g., mood, motivation) to influence its behavior over time.
-*   **Interactive Chat**: A rich chat interface with support for multi-modal file uploads, markdown (including code blocks and LaTeX math formulas), and reinforcement feedback.
-*   **Extensible Tool System**: Create custom scripts that can be assigned to and used by any unit.
-*   **State Persistence**: All configuration changes are automatically saved to your browser's Local Storage, so you can pick up right where you left off.
+Units serve as modular cognitive agents. They:
 
-## Technical Stack & Libraries
+- Bind to local Ollama, Lmstudio, or cloud LLM providers with editable configurations.  
+- Support **Prompt Templates** for custom instructions with dynamic variable injection.  
+- Manage **Training Vectors** and **Experience Vectors** to evolve over time.  
+- Choose between **Standard DB** or **Scalable DB** for memory storage.  
+- Use **Todo Vectors** to handle long-running workflows without token-limit interruptions.  
+- Add, remove, or reinforce document “neurons” on demand, inspired by mind-map memory.  
+- Convertible into **Motor Units** with internal control loops.  
+- **Provider Support:** Every vector store or database attached to a Unit can select from a dropdown of supported providers (local or cloud).  
+- **Core Protection:** Units essential for framework operation cannot be deleted.
 
-AIX is built with a modern, professional development stack.
+## 🚀 Key Features
 
-*   **Core Framework**:
-    *   [React](https://react.dev/) with TypeScript for building the user interface.
-    *   [Vite](https://vitejs.dev/) for a fast, modern development and build experience.
+| Feature                       | Description                                                                                                   |
+|-------------------------------|---------------------------------------------------------------------------------------------------------------|
+| Modular Coalitions            | Create, modify, and dissolve Rooms and Units at runtime                                                       |
+| LLM Agnosticism               | Assign each Unit to local or cloud models with full configuration control                                     |
+| Prompt Support                | Custom prompt templates per Unit with dynamic variable injection                                              |
+| Mind-Map Memory               | Removable, editable neuron-style document memory                                                              |
+| RAG Ecosystem                 | Information Room hosts RAG Units & Bases for vector-store retrieval and reranking                             |
+| Data Excavation               | Digging Units mine deep knowledge from document neurons                                                       |
+| System Profiling              | System Profiler Unit records host environment details                                                         |
+| Visual Interpretation         | Stage-by-stage image analysis and generation via VLM and Stable Diffusion                                     |
+| Audio Agents                  | Layered speech analysis and synthesis in the Voice Room                                                       |
+| GUI Inspection                | Desktop Control Unit reads GUI and detects UI elements and emojis                                             |
+| Enforcement Logic             | Sanction Units enact and reapply actions based on reasoning outputs                                           |
+| Task Persistence              | Todo Vectors preserve task state across execution flows                                                       |
+| Motorization                  | Units can become internal controllers with state-feedback loops                                               |
+| Extensible Tooling            | Attach custom scripts and tools to any Unit                                                                   |
+| Provider Selection            | Dropdown menus for vector-store and database providers in every Unit’s memory configuration                   |
+| State Persistence             | All configurations and data stored locally for seamless experimentation                                       |
+| Rich UI Support               | Markdown, LaTeX, code blocks, file upload, provider dropdowns, and interactive feedback                       |
+| Core Unit Protection          | Units required for project operation cannot be removed                                                         |
+| Settings Panel                | Microphone, audio volume, and theme options are available                                                      |
+| API Output Configuration      | Configure framework API endpoints and payload formats                                                          |
 
-*   **UI & Styling**:
-    *   [Tailwind CSS](https://tailwindcss.com/) for rapid, utility-first styling.
+---
 
-*   **Markdown & Code Rendering**:
-    *   [react-markdown](https://github.com/remarkjs/react-markdown): To render chat messages.
-    *   [remark-gfm](https://github.com/remarkjs/remark-gfm): For GitHub-flavored markdown.
-    *   [remark-math](https://github.com/remarkjs/remark-math) & [rehype-katex](https://github.com/remarkjs/rehype-katex): For beautiful LaTeX math rendering.
-    *   [react-syntax-highlighter](https://github.com/react-syntax-highlighter/react-syntax-highlighter): For themed code block highlighting.
+## 🛠️ Tech Stack & Getting Started
 
-*   **Client-Side Data Processing**:
-    *   **RAG Document Ingestion**:
-        *   [pdf.js](https://mozilla.github.io/pdf.js/): For in-browser PDF text extraction.
-        *   [mammoth.js](https://github.com/mwilliamson/mammoth.js): For in-browser DOCX text extraction.
-    *   **In-Browser AI Models**:
-        *   [@xenova/transformers](https://github.com/xenova/transformers.js): Powers the zero-configuration "Embedded Reranker" that runs entirely in the browser.
+- **Frontend:** React (TypeScript) + Vite + TailwindCSS  
+- **LLM Integration:** Ollama for local inference, configurable Cloud APIs  
+- **RAG Support:** pdf.js, mammoth.js, @xenova/transformers reranker  
+- **UI Enhancements:** react-markdown, remark-gfm, rehype-katex, syntax highlighter  
+
+### Setup
+
+```bash
+git clone https://github.com/tarikkaya/aix
+cd aix && npm install
+npm run dev  # → http://localhost:5173
