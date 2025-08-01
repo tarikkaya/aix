@@ -1,8 +1,0 @@
-{
-  "name": "AIX: The Unknown AI",
-  "description": "An AGI framework for building and managing AI coalitions. It features a hierarchical room/unit structure, a dynamic chat interface with reinforcement feedback, and detailed configuration panels for each AI unit.",
-  "requestFramePermissions": [
-    "microphone"
-  ],
-  "prompt": ""
-}
